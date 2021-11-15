@@ -20,6 +20,7 @@ var (
 	supportComment bool
 	GoLangTmpl     LangTmpl = LangTmpl{
 		template.FuncMap{"Mapper": mapper.Table2Obj,
+			"LowMapper":  lowMapper,
 			"Type":       typestring,
 			"Tag":        tag,
 			"UnTitle":    unTitle,
@@ -188,6 +189,14 @@ func genGoImports(tables []*core.Table) map[string]string {
 		}
 	}
 	return imports
+}
+
+func lowMapper(s string) string {
+	if len(s) <= 1 {
+		return strings.ToLower(s)
+	}
+	s2 := mapper.Table2Obj(s)
+	return strings.ToLower(s2[:1]) + s2[1:]
 }
 
 func typestring(col *core.Column) string {

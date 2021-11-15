@@ -1,4 +1,6 @@
-module github.com/go-xorm/cmd/xorm
+module github.com/jinjiaji512/go-xorm-cmd/xorm
+
+go 1.14
 
 require (
 	cloud.google.com/go v0.37.0 // indirect

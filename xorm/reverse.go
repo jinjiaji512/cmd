@@ -32,7 +32,6 @@ var CmdReverse = &Command{
 	Long: `
 according database's tables and columns to generate codes for Go, C++ and etc.
 
-    -s                Generated one go file for every table
     driverName        Database driver name, now supported four: mysql mymysql sqlite3 postgres
     datasourceName    Database connection uri, for detail infomation please visit driver's project page
     tmplPath          Template dir for generated. the default templates dir has provide 1 template
@@ -86,11 +85,6 @@ func runReverse(cmd *Command, args []string) {
 	if len(args) < 3 {
 		fmt.Println("params error, please see xorm help reverse")
 		return
-	}
-
-	var isMultiFile bool = true
-	if use, ok := cmd.Flags["-s"]; ok {
-		isMultiFile = !use
 	}
 
 	curPath, err := os.Getwd()
@@ -231,32 +225,44 @@ func runReverse(cmd *Command, args []string) {
 			return err
 		}
 
-		var w *os.File
-		fileName := info.Name()
-		newFileName := fileName[:len(fileName)-4]
-		ext := path.Ext(newFileName)
-
-		if !isMultiFile {
-			w, err = os.Create(path.Join(genDir, newFileName))
+		for _, table := range tables {
+			tempFullPath := filepath.Join(f)
+			//计算模板文件相对于genDir的相对路径
+			s, err := filepath.Rel(dir, tempFullPath)
+			if err != nil {
+				log.Errorf("%v", err)
+				return err
+			}
+			genFilePath := path.Join(genDir, s)
+			//去掉.tpl
+			genFilePath = genFilePath[:len(genFilePath)-4]
+			//替换"table"为表名
+			genFilePath = strings.ReplaceAll(genFilePath, "table", table.Name)
+			genDirPath := filepath.Dir(genFilePath)
+			err = os.MkdirAll(genDirPath, os.ModePerm)
 			if err != nil {
 				log.Errorf("%v", err)
 				return err
 			}
 
-			imports := langTmpl.GenImports(tables)
-
-			tbls := make([]*core.Table, 0)
-			for _, table := range tables {
-				//[SWH|+]
-				if prefix != "" {
-					table.Name = strings.TrimPrefix(table.Name, prefix)
-				}
-				tbls = append(tbls, table)
+			//[SWH|+]
+			if prefix != "" {
+				table.Name = strings.TrimPrefix(table.Name, prefix)
 			}
+			// imports
+			tbs := []*core.Table{table}
+			imports := langTmpl.GenImports(tbs)
+
+			w, err := os.Create(genFilePath)
+			if err != nil {
+				log.Errorf("%v", err)
+				return err
+			}
+			defer w.Close()
 
 			newbytes := bytes.NewBufferString("")
 
-			t := &Tmpl{Tables: tbls, Imports: imports, Models: model}
+			t := &Tmpl{Tables: tbs, Imports: imports, Models: model}
 			err = tmpl.Execute(newbytes, t)
 			if err != nil {
 				log.Errorf("%v", err)
@@ -272,7 +278,7 @@ func runReverse(cmd *Command, args []string) {
 			if langTmpl.Formater != nil {
 				source, err = langTmpl.Formater(string(tplcontent))
 				if err != nil {
-					log.Errorf("%v", err)
+					log.Errorf("%v-%v", err, string(tplcontent))
 					return err
 				}
 			} else {
@@ -281,51 +287,6 @@ func runReverse(cmd *Command, args []string) {
 
 			w.WriteString(source)
 			w.Close()
-		} else {
-			for _, table := range tables {
-				//[SWH|+]
-				if prefix != "" {
-					table.Name = strings.TrimPrefix(table.Name, prefix)
-				}
-				// imports
-				tbs := []*core.Table{table}
-				imports := langTmpl.GenImports(tbs)
-
-				w, err := os.Create(path.Join(genDir, table.Name+ext))
-				if err != nil {
-					log.Errorf("%v", err)
-					return err
-				}
-				defer w.Close()
-
-				newbytes := bytes.NewBufferString("")
-
-				t := &Tmpl{Tables: tbs, Imports: imports, Models: model}
-				err = tmpl.Execute(newbytes, t)
-				if err != nil {
-					log.Errorf("%v", err)
-					return err
-				}
-
-				tplcontent, err := ioutil.ReadAll(newbytes)
-				if err != nil {
-					log.Errorf("%v", err)
-					return err
-				}
-				var source string
-				if langTmpl.Formater != nil {
-					source, err = langTmpl.Formater(string(tplcontent))
-					if err != nil {
-						log.Errorf("%v-%v", err, string(tplcontent))
-						return err
-					}
-				} else {
-					source = string(tplcontent)
-				}
-
-				w.WriteString(source)
-				w.Close()
-			}
 		}
 
 		return nil
